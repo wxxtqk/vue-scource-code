@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>简单的双向绑定原理</title>
+</head>
+<body>
+	<div id="app">
+		<input type="text" id="a" v-model="input">
+		{{text}}
+	</div>
+</body>
+</html>
+<script type="text/javascript">
+
+	/**
+	 * 此模块相当于compile，模板的解析
+	 */
+	
+	function nodeToFragment(node, vm){
+		var frag = document.createDocumentFragment();// 创建碎片文档节点
+		var child;
+		while (child = node.firstChild) {
+			compile(child, vm)
+			frag.appendChild(child) // 劫持node的所有子节点
+		}
+		return frag
+	}
+	//数据初始化绑定
+	//node 为节点
+	function compile(node, vm){
+		var reg = /\{\{(.*)\}\}/;
+		//节点类型为元素
+		if (node.nodeType === 1) {
+			var attr = node.attributes; //获取属性
+			//解析属性
+			for(var i = 0; i < attr.length; i++){
+				//如果属性是v-model
+				if (attr[i].nodeName == 'v-model') {
+					var name = attr[i].nodeValue; //获取v-model绑定的属性名
+					node.addEventListener('input', function(e){
+						// 给相应的data属性赋值，进而触发该属性的set方法
+						vm[name] = e.target.value
+					})
+					node.value = vm.data[name]; //将vm中的data的值赋给该node
+					node.removeAttribute('v-model'); //然后移除v-model属性
+				}
+			}
+		}
+		// 节点类型为text
+		if(node.nodeType === 3){
+			if (reg.test(node.nodeValue)) {
+				var name = RegExp.$1; //获取匹配的字符串**
+				name = name.trim() //去掉空格
+				node.nodeValue = vm.data[name] //将vm中的data的值赋给该node
+			}
+		}
+	}
+
+
+
+
+	/**
+	 * 数据监听，相当于observer
+	 */
+
+	 function defineReactive(obj, key, val){
+	 	observer(val)
+	 	Object.defineProperty(obj, key, {
+	 		enumerable: true, //可枚举
+	 		configurable: false, // 不能够在define
+	 		get: function(){
+	 			return val
+	 		},
+	 		set: function(newValue){
+	 			if (newValue === val) return
+	 			val = newValue
+	 			console.log(val)
+	 		}
+	 	})
+	 }
+	 function observer(obj, vm){
+	 	if (!obj || typeof obj !== 'object') {
+	 		return
+	 	}
+	 	Object.keys(obj).forEach(function(key){
+	 		defineReactive(vm, key, obj[key])
+	 	})
+	 }
+
+
+	function Vue(options){
+		this.data = options.data;
+		var id = options.el;
+		var data = this.data
+		observer(data, this)
+		var dom = nodeToFragment(document.getElementById(id),this)
+		document.getElementById(id).appendChild(dom)
+	}
+	var vm = new Vue({
+		el: 'app',
+		data: {
+			text: 'hello world',
+			input: '请输入文字'
+		}
+	})
+</script>
