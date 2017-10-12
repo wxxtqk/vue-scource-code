@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Document</title>
+</head>
+<body>
+	<input type="text" name="" id="i-msg">
+	<span id="text"></span>
+</body>
+</html>
+
+<script type="text/javascript">
+	var data = {}
+	Object.defineProperty(data, 'test', {
+		enumerable: true, //可枚举
+		configurable: false, //不可从新define
+		get: function(){
+			return val
+		},
+		set: function(newvale){
+			document.getElementById('i-msg').value = newvale
+			document.getElementById('text').innerHTML = newvale
+		}
+	})
+	document.addEventListener('keyup', function(e){
+		data.test = e.target.value; //触发data中set函数
+	})
+</script>

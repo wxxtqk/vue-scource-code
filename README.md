@@ -17,7 +17,45 @@
 
 本文参考2:https://segmentfault.com/a/1190000006599500
 
+废话就不多说了，直接先来上段代码块儿，先通过Object.defineProperty()实现一个简单双向数据绑定,通过Object.defineProperty()来监听属性的变动，然后在触发set函数，从而触发视图的更新
 
+##### 1.简单的双向数据绑定
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Document</title>
+</head>
+<body>
+	<input type="text" name="" id="i-msg">
+	<span id="text"></span>
+</body>
+</html>
+
+<script type="text/javascript">
+	var data = {}
+	Object.defineProperty(data, 'test', {
+		enumerable: true, //可枚举
+		configurable: false, //不可从新define
+		get: function(){
+			return val
+		},
+		set: function(newvale){
+			document.getElementById('i-msg').value = newvale
+			document.getElementById('text').innerHTML = newvale
+		}
+	})
+	document.addEventListener('keyup', function(e){
+		data.test = e.target.value; //触发data中set函数
+	})
+</script>
+```
+
+![](img/1.gif)
+
+监听文档的keyup事件，每次keyup事件都会触发Object.defineProperty()中的set函数，从而动态的给input和span赋值，从而实现简单双向数据绑定
 
 
 
