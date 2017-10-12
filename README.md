@@ -55,7 +55,196 @@
 
 ![](img/1.gif)
 
-监听文档的keyup事件，每次keyup事件都会触发Object.defineProperty()中的set函数，从而动态的给input和span赋值，从而实现简单双向数据绑定
+监听文档的keyup事件，每次keyup事件都会触发Object.defineProperty()中的set函数，从而动态的给input和span赋值，从而实现简单双向数据绑定，当然不会就这么简单的，下面来分布分析
+
+##### 1.模板解析
+
+我们大家都知道在vue中会有一个根元素
+
+```html
+<div id="app">
+  ....
+</div>
+```
+
+那么vue是怎么解析的呢,这儿就用文档碎片DocumentFragment是一个轻量级的文档，可以包含和控制节点，但不会像文档那样占用额外的资源。虽然不能把文档碎片直接添加到文档中，但可以将它作为一个“仓库”来使用，即可以在里面保存将来要添加到文档的节点。如果将文档中的节点添加到文档片段中，就会从文档树种移除该节点。vue的模板解析就是用到这点儿（我的理解和一些参考）
+
+下面是简单html模板
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>vue-simple-scource-code</title>
+</head>
+<body>
+	<div id="app">
+		<input type="text" name="" id="i-msg" v-model="msg">
+		{{msg}}
+	</div>
+</body>
+</html>
+<script src="compile.js"></script>
+
+```
 
 
 
+compile.js
+
+```javascript
+
+
+/**
+ * 把需要解析的模板添加到文档碎片中
+ * @param {object} node 需要解析的文档
+ */
+function addToFragment(node){
+	var frag = document.createDocumentFragment(); //创建文档碎片
+	var child;
+	//循环直到把所有的的子节点都添加到文档碎片中
+	while (child = node.firstChild) {
+		frag.appendChild(child)  //把节点添加到文档碎片中，并在文档中移除该节点
+	}
+	return frag
+}
+
+var node = document.getElementById('app')
+addToFragment(node)
+```
+
+把文档中id为app的所有子元素都添加到文档碎片中，方便以后使用。这样文档中app下就没有任何子元素了
+
+##### 2.初始化数据
+
+上面第一步拿到模板，现在要把数据添加到文档碎片中，并展现到页面中,就是我们通常的
+
+```javascript
+var vm = new Vue({
+	el: 'app',
+	data: {
+		msg: 'hello'
+	}
+})
+```
+
+修改index.html
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>vue-simple-scource-code</title>
+	<script src="compile.js"></script>
+</head>
+<body>
+	<div id="app">
+		<input type="text" name="" id="i-msg" v-model="msg">
+		{{msg}}
+	</div>
+</body>
+</html>
+<script type="text/javascript">
+	var vm = new Vue({
+		el: 'app',
+		data: {
+			msg: 'hello'
+		}
+	})
+</script>
+```
+
+修改后的compile.js
+
+```javascript
+
+/**
+ * 把需要解析的模板添加到文档碎片中
+ * @param {object} node 需要解析的文档
+ */
+function addToFragment(node, vm){
+	var frag = document.createDocumentFragment(); //创建文档碎片
+	var child;
+	//循环直到把所有的的子节点都添加到文档碎片中
+	while (child = node.firstChild) {
+		compile(child,vm)
+		frag.appendChild(child)  //把节点添加到文档碎片中，并在文档中移除该节点
+	}
+	return frag
+}
+/**
+ * 把数据添加到文档碎片中
+ * @param  {object} node 需要添加的节点
+ * @param  {object} vm   实例化的数据
+ * @return {object}      null
+ */
+function compile(node, vm){
+	var reg = /\{\{(.*)\}\}/; // 正则匹配{{msg}}
+	// 节点类型是元素
+	if (node.nodeType === 1) {
+		var attr = node.attributes;
+		// 解析自定义属性
+		for(var i = 0; i < attr.length; i++){
+			if (attr[i].nodeName == 'v-model') {
+				var name = attr[i].nodeValue;  //解析自定义属性v-model 
+				node.value = vm.data[name]; // 并将实例化vm中对应的值赋给该点
+				node.removeAttribute('v-model'); //移除自定义属性，防止在页面上显示出来
+			}
+		}
+	}
+	// 如果是文档
+	if (node.nodeType === 3) {
+		if (reg.test(node.nodeValue)) {
+			var name = RegExp.$1; // 获取{{msg}} 中的字符串
+			name = name.trim();
+			node.nodeValue = vm.data[name]
+		}
+	}
+}
+
+
+function Vue(opt){
+	if (!opt) {
+		console.warn('需要传入实例化参数')
+		return
+	}
+	this.data = opt.data
+	var id = opt.el
+	var dom = addToFragment(document.getElementById(id),this)
+	document.getElementById(id).appendChild(dom) //把文档碎片到文档中
+}
+```
+
+![](img/2.png)
+
+通过上面的修改实现了初始化
+
+##### 3.发布与订阅
+
+前面实现了初次化，可以把实例化中的data的值绑定到文档中，但是我们还没有实现数据双向绑定，我们最开始提到要用到最重要的object.defineProperty()函数实现简单的数据双向绑定。只要属性“msg”发生了变化，就触发set函数，然后通知对应的视图进行更新
+
+observer.js
+
+```javascript
+/**
+ * 	定义一个订阅者容器
+ */
+function Dep(){
+	this.subs = []
+}
+Dep.prototype = {
+	addSubs: function(sub){
+		this.subs.push(sub)
+	},
+	notify: function(){
+		this.subs.forEach(function(sub){
+			sub.update()
+		})
+	}
+
+}
+```
+
+上面Dep的原型有两个函数，一个是添加订阅者，一个是通知订阅者更新视图
