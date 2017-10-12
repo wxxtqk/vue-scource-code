@@ -247,4 +247,56 @@ Dep.prototype = {
 }
 ```
 
-上面Dep的原型有两个函数，一个是添加订阅者，一个是通知订阅者更新视图
+上面Dep的原型有两个函数，一个是添加订阅者，一个是通知订阅者更新视图。
+
+```javascript
+/**
+ * 	实现数据监听，数据变换触发set函数，通知相应的观察者
+ */
+
+function observer(data, vm){
+	if (!data ||typeof data !== 'object') return
+	Object.keys(data).foeEach(function(key){
+		defineReactive(vm, key, data[key])
+	})
+}
+function defineReactive(vm, key, val){
+	var dep = new Dep()
+	Object.defineProperty(vm, key, {
+		enumerable: true, // 可枚举,
+		configurable: false,// 不可define
+		get: function(){
+			return val
+		},
+		set:function(newValue){
+			if (val === newValue) return
+			dep.notify() // 数据发生改变通知订阅者更新
+		}
+	})
+}
+
+/**
+ * 	定义一个订阅者容器
+ */
+function Dep(){
+	this.subs = []
+}
+Dep.prototype = {
+	addSubs: function(sub){
+		this.subs.push(sub)
+	},
+	notify: function(){
+		this.subs.forEach(function(sub){
+			sub.update()
+		})
+	}
+
+}
+```
+
+上面observer.js完成了数据的监听，数据发生变化后通知订阅者，让订阅者去通知相应的视图发生改变,但是该通知哪一个订阅者呢？订阅者如何添加呢？
+
+下面实现订阅者watcher。watcher是非常重要的一个角色，他是连接compile跟observer的桥梁，view=>model和model=>view都得搞watcher来实现，数据发生了改天通知watcher，让watcher通知那个视图更新。视图更新了让watcher通知那个数据发生改变
+
+watcher.js
+
