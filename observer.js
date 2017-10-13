@@ -4,7 +4,7 @@
 
 function observer(data, vm){
 	if (!data ||typeof data !== 'object') return
-	Object.keys(data).foeEach(function(key){
+	Object.keys(data).forEach(function(key){
 		defineReactive(vm, key, data[key])
 	})
 }
@@ -14,10 +14,13 @@ function defineReactive(vm, key, val){
 		enumerable: true, // 可枚举,
 		configurable: false,// 不可define
 		get: function(){
+			// 只有在页面获取数据时候才会把观察者添加到dep中，
+			if (Dep.target) dep.addSubs(Dep.target)
 			return val
 		},
 		set:function(newValue){
 			if (val === newValue) return
+			val = newValue
 			dep.notify() // 数据发生改变通知订阅者更新
 		}
 	})

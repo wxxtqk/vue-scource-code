@@ -256,7 +256,7 @@ Dep.prototype = {
 
 function observer(data, vm){
 	if (!data ||typeof data !== 'object') return
-	Object.keys(data).foeEach(function(key){
+	Object.keys(data).forEach(function(key){
 		defineReactive(vm, key, data[key])
 	})
 }
@@ -270,6 +270,7 @@ function defineReactive(vm, key, val){
 		},
 		set:function(newValue){
 			if (val === newValue) return
+            val = newValue
 			dep.notify() // 数据发生改变通知订阅者更新
 		}
 	})
@@ -300,3 +301,187 @@ Dep.prototype = {
 
 watcher.js
 
+```javascript
+/**
+ * 建立订阅者,并实现observer和compile之间的桥梁
+ * @param {object} vm   实例化的vm
+ * @param {object} node 对那个文档节点实施订阅和监管
+ * @param {[string} name 文档节点中自定义的属性值
+ */
+function Watcher(vm, node, name){
+		Dep.target = this; //将自己赋值给一个全局变量Dep.target,以便在observer中添加订阅者，把this添加到订阅器中
+		this.name = name;
+		this.vm = vm;
+  		this.node = node;
+		this.update()
+		Dep.target = null //执行完后把Dep.target赋值为null,保证只有一个Dep.target
+}
+Watcher.prototype = {
+	update: function(){
+		this.get()
+		this.node.nodeValue = this.value;
+	},
+	// 获取vm实例中data的属性值
+	get:function(){
+		this.value = this.vm[this.name] // 触发相应属性的get函数数,触发后就可以把这个属性添加到订阅者容器中
+	}
+}
+```
+
+完成了observer、compile和watcher，现在我们要把这三个关联起来就完成大事了
+
+##### 4.实现数据的双向绑定
+
+首先先让complie和watche关联起来，先修改compile.js文件
+
+```javascript
+
+/**
+ * 把需要解析的模板添加到文档碎片中
+ * @param {object} node 需要解析的文档
+ */
+function addToFragment(node, vm){
+	var frag = document.createDocumentFragment(); //创建文档碎片
+	var child;
+	//循环直到把所有的的子节点都添加到文档碎片中
+	while (child = node.firstChild) {
+		compile(child,vm)
+		frag.appendChild(child)  //把节点添加到文档碎片中，并在文档中移除该节点
+	}
+	return frag
+}
+/**
+ * 把数据添加到文档碎片中
+ * @param  {object} node 需要添加的节点
+ * @param  {object} vm   实例化的数据
+ * @return {object}      null
+ */
+function compile(node, vm){
+	var reg = /\{\{(.*)\}\}/; // 正则匹配{{msg}}
+	// 节点类型是元素
+	if (node.nodeType === 1) {
+		var attr = node.attributes;
+		// 解析自定义属性
+		for(var i = 0; i < attr.length; i++){
+			if (attr[i].nodeName == 'v-model') {
+				var name = attr[i].nodeValue;  //解析自定义属性v-model 
+
+				node.addEventListener('keyup', function(e){
+					// 给相应的data属性赋值，进而触发该属性的set方法
+					vm[name] = e.target.value
+				})
+
+				node.value = vm.data[name]; // 并将实例化vm中对应的值赋给该点
+				node.removeAttribute('v-model'); //移除自定义属性，防止在页面上显示出来
+			}
+		}
+	}
+	// 如果是文档
+	if (node.nodeType === 3) {
+		if (reg.test(node.nodeValue)) {
+			var name = RegExp.$1; // 获取{{msg}} 中的字符串
+			name = name.trim();
+			//node.nodeValue = vm.data[name] //将vm中的data的值赋给该node
+			new Watcher(vm, node, name)
+		}
+	}
+}
+
+
+function Vue(opt){
+	if (!opt) {
+		console.warn('需要传入实例化参数')
+		return
+	}
+	this.data = opt.data
+	var id = opt.el
+	observer(this.data, this) //调用observer函数
+	var dom = addToFragment(document.getElementById(id),this)
+	document.getElementById(id).appendChild(dom) //把文档碎片到文档中
+}
+```
+
+我们在compile分别添加了，keyup事件，这样输入的时候就可以动态的修改实例化vm中属性的值，从而触发setter
+
+在文档中实例化一个订阅者(new Watcher(vm, node ,name))，这样就把这个节点添加到订阅中容器中
+
+```javascript
+				//....省略
+				node.addEventListener('keyup', function(e){
+					// 给相应的data属性赋值，进而触发该属性的set方法
+					vm[name] = e.target.value
+				})
+
+
+				//....省略
+				// 如果是文档
+                if (node.nodeType === 3) {
+                    if (reg.test(node.nodeValue)) {
+                        var name = RegExp.$1; // 获取{{msg}} 中的字符串
+                        name = name.trim();
+                        //node.nodeValue = vm.data[name] //将vm中的data的值赋给该node
+                        new Watcher(vm, node, name)
+                    }
+                }
+```
+
+修改observer.js
+
+```javascript
+//....省略
+function defineReactive(vm, key, val){
+	var dep = new Dep()
+	Object.defineProperty(vm, key, {
+		enumerable: true, // 可枚举,
+		configurable: false,// 不可define
+		get: function(){
+			// 只有在页面获取数据时候才会把观察者添加到dep中，
+			if (Dep.target) dep.addSubs(Dep.target)
+			return val
+		},
+		set:function(newValue){
+			if (val === newValue) return
+			val = newValue
+			dep.notify() // 数据发生改变通知订阅者更新
+		}
+	})
+}
+//....省略
+```
+
+在observer中的get函数中添加了一下代码。结合compile中new Watcher(vm, node ,name)就可以把节点添加到订阅器中，当触发set函数就会通知这个节点去更新视图，其中判断Dep.target是为了确保订阅者的唯一性，因为它是一个全局变量
+
+```javascript
+if (Dep.target) dep.addSubs(Dep.target)
+```
+
+最后在index.html页面中引入js就完成了简单的双向数据绑定
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>vue-simple-scource-code</title>
+	<script src="observer.js"></script>
+	<script src="watcher.js"></script>
+	<script src="compile.js"></script>
+</head>
+<body>
+	<div id="app">
+		<input type="text" name="" id="i-msg" v-model="msg">
+		{{msg}}
+	</div>
+</body>
+</html>
+<script type="text/javascript">
+	var vm = new Vue({
+		el: 'app',
+		data: {
+			msg: 'hello'
+		}
+	})
+</script>
+```
+
+后续再慢慢的处理点击事件等等

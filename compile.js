@@ -28,6 +28,12 @@ function compile(node, vm){
 		for(var i = 0; i < attr.length; i++){
 			if (attr[i].nodeName == 'v-model') {
 				var name = attr[i].nodeValue;  //解析自定义属性v-model 
+
+				node.addEventListener('keyup', function(e){
+					// 给相应的data属性赋值，进而触发该属性的set方法
+					vm[name] = e.target.value
+				})
+
 				node.value = vm.data[name]; // 并将实例化vm中对应的值赋给该点
 				node.removeAttribute('v-model'); //移除自定义属性，防止在页面上显示出来
 			}
@@ -38,7 +44,8 @@ function compile(node, vm){
 		if (reg.test(node.nodeValue)) {
 			var name = RegExp.$1; // 获取{{msg}} 中的字符串
 			name = name.trim();
-			node.nodeValue = vm.data[name]
+			//node.nodeValue = vm.data[name] //将vm中的data的值赋给该node
+			new Watcher(vm, node, name)
 		}
 	}
 }
@@ -51,6 +58,7 @@ function Vue(opt){
 	}
 	this.data = opt.data
 	var id = opt.el
+	observer(this.data, this)
 	var dom = addToFragment(document.getElementById(id),this)
 	document.getElementById(id).appendChild(dom) //把文档碎片到文档中
 }
